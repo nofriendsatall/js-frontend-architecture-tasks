@@ -40,6 +40,137 @@ const validate = (fields) => {
   }
 };
 
+
+
+
+
 // BEGIN
 
+const SELECTORS = {
+  FORM: '[data-form="sign-up"]',
+  CONTAINER: '[data-container="sign-up"]',
+  SUBMIT_BUTTON: 'input[type="submit"]',
+};
+
+const PROCESS_STATES = {
+  FILLING: 'filling',
+  SENDING: 'sending',
+  SUBMITTED: 'submitted',
+};
+
+
+const createFeedbackElement = (input, message) => {
+  const feedback = document.createElement('div');
+  feedback.classList.add('invalid-feedback');
+  feedback.textContent = message;
+  input.insertAdjacentElement('afterend', feedback);
+  return feedback;
+};
+
+const updateInputValidityState = (input, error) => {
+  const feedback = input.nextElementSibling;
+  
+  if (error) {
+    input.classList.add('is-invalid');
+    if (!feedback?.classList.contains('invalid-feedback')) {
+      createFeedbackElement(input, error.message);
+    } else {
+      feedback.textContent = error.message;
+    }
+  } else {
+    input.classList.remove('is-invalid');
+    if (feedback?.classList.contains('invalid-feedback')) {
+      feedback.remove();
+    }
+  }
+};
+
+const updateSubmitButtonState = (submitButton, isValid) => {
+  submitButton.disabled = !isValid;
+  submitButton.style.cursor = isValid ? 'pointer' : 'not-allowed';
+};
+
+
+export default () => {
+  
+  const state = {
+    form: {
+      valid: false,
+      processState: PROCESS_STATES.FILLING,
+      fields: {
+        name: '',
+        email: '',
+        password: '',
+        passwordConfirmation: '',
+      },
+      errors: {},
+    },
+  };
+
+
+  const form = document.querySelector(SELECTORS.FORM);
+  const container = document.querySelector(SELECTORS.CONTAINER);
+  const submitButton = form.querySelector(SELECTORS.SUBMIT_BUTTON);
+
+
+  
+  const handleStateChange = (path, value) => {
+    if (path.startsWith('form.fields')) {
+      state.form.errors = validate(state.form.fields);
+      state.form.valid = isEmpty(state.form.errors);
+      
+      updateSubmitButtonState(submitButton, state.form.valid);
+      updateFormErrors(form, state.form.errors);
+    }
+
+    if (path === 'form.processState' && value === PROCESS_STATES.SUBMITTED) {
+      container.innerHTML = 'User Created!';
+    }
+  };
+
+  const watchedState = onChange(state, handleStateChange);
+
+
+  const handleInput = (e) => {
+    const { name, value } = e.target;
+    watchedState.form.fields[name] = value;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    watchedState.form.processState = PROCESS_STATES.SENDING;
+    updateSubmitButtonState(submitButton, false);
+
+    try {
+      await axios.post(routes.usersPath(), watchedState.form.fields);
+      watchedState.form.processState = PROCESS_STATES.SUBMITTED;
+    } catch (error) {
+      watchedState.form.processState = PROCESS_STATES.FILLING;
+      showNetworkError(error);
+      updateSubmitButtonState(submitButton, state.form.valid);
+    }
+  };
+
+
+  const init = () => {
+    form.addEventListener('input', handleInput);
+    form.addEventListener('submit', handleSubmit);
+    updateFormErrors(form, state.form.errors);
+  };
+
+  init();
+};
+
+const updateFormErrors = (form, errors) => {
+  Array.from(form.elements).forEach((element) => {
+    if (element.name) {
+      updateInputValidityState(element, errors[element.name]);
+    }
+  });
+};
+
+const showNetworkError = (error) => {
+  console.error(errorMessages.network.error, error);
+};
 // END
